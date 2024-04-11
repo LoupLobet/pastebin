@@ -98,6 +98,11 @@ func (srv *Server) postDoc(rw http.ResponseWriter, req *http.Request) {
 			break
 		}
 	}
+	if k == int(math.Pow(float64(len(nameCharset)), float64(nameLen))) {
+		// no doc name available
+		rw.WriteHeader(http.StatusInsufficientStorage)
+		return
+	}
 
 	f, err := os.OpenFile(srv.docPath(name), os.O_WRONLY|os.O_CREATE, 0400)
 	if err != nil {
