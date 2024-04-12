@@ -78,7 +78,8 @@ func (srv *Server) postDoc(rw http.ResponseWriter, req *http.Request) {
 
 	var name string
 	srv.mu.Lock()
-	for k := 0; k < int(math.Pow(float64(len(nameCharset)), float64(nameLen))); k++ {
+	var k int
+	for k = 0; k < int(math.Pow(float64(len(nameCharset)), float64(nameLen))); k++ {
 		for i := 0; i < nameLen; i++ {
 			name += string(nameCharset[rand.Intn(len(nameCharset))])
 		}
