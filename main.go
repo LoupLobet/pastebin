@@ -34,6 +34,17 @@ func main() {
 		root: *ServerRoot,
 		mu:   new(sync.Mutex),
 	}
+
+	// The server doesn't keep track of non-deleted docs through restarts, load
+	// the existing docs by scheduling there deletion with the default lifetime.
+	docs, err := os.ReadDir(srv.root)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, doc := range(docs) {
+		srv.scheduleDelete(doc.Name(), *DefaultLifetime)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{doc}", srv.getDoc)
 	mux.HandleFunc("POST /", srv.postDoc)
