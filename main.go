@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"io"
 	"log"
-	"math"
 	"math/rand"
 	"net/http"
 	"os"
@@ -20,7 +20,7 @@ type Server struct {
 }
 
 var (
-	ServerListenAddr   = flag.String("l", "127.0.0.1:8080", "Listen address")
+	ServerListenAddr   = flag.String("l", "127.0.0.1:1488", "Listen address")
 	ServerRoot         = flag.String("d", "docs", "Root dir")
 	DefaultLifetime    = flag.Duration("t", 7*24*time.Hour, "Document lifetime")
 	DefaultNameLength  = flag.Int("n", 9, "Document name length")
@@ -41,7 +41,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, doc := range(docs) {
+	for _, doc := range docs {
 		srv.scheduleDelete(doc.Name(), *DefaultLifetime)
 	}
 
@@ -56,6 +56,7 @@ func (srv *Server) docPath(name string) string {
 }
 
 func (srv *Server) postDoc(rw http.ResponseWriter, req *http.Request) {
+	log.Println("from outside")
 	var lifetime time.Duration
 	if headerVal := req.Header.Get("Doc-Lifetime"); headerVal != "" {
 		var err error
@@ -89,8 +90,15 @@ func (srv *Server) postDoc(rw http.ResponseWriter, req *http.Request) {
 
 	var name string
 	srv.mu.Lock()
-	var k int
-	for k = 0; k < int(math.Pow(float64(len(nameCharset)), float64(nameLen))); k++ {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for {
+		select {
+		case <-ctx.Done():
+			rw.WriteHeader(http.StatusRequestTimeout)
+			return
+		default:
+		}
 		for i := 0; i < nameLen; i++ {
 			name += string(nameCharset[rand.Intn(len(nameCharset))])
 		}
@@ -110,16 +118,12 @@ func (srv *Server) postDoc(rw http.ResponseWriter, req *http.Request) {
 			break
 		}
 	}
-	if k == int(math.Pow(float64(len(nameCharset)), float64(nameLen))) {
-		// no doc name available
-		rw.WriteHeader(http.StatusInsufficientStorage)
-		return
-	}
 
 	f, err := os.OpenFile(srv.docPath(name), os.O_WRONLY|os.O_CREATE, 0400)
 	if err != nil {
 		rw.WriteHeader(http.StatusInternalServerError)
 	}
+	srv.mu.Unlock()
 	_, err = io.Copy(f, req.Body)
 	if err != nil {
 		os.Remove(srv.docPath(name))
@@ -127,7 +131,6 @@ func (srv *Server) postDoc(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 	f.Close()
-	srv.mu.Unlock()
 	srv.scheduleDelete(name, lifetime)
 	rw.Write([]byte(name))
 }
