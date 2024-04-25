@@ -22,9 +22,12 @@ type Server struct {
 var (
 	ServerListenAddr   = flag.String("l", "127.0.0.1:1488", "Listen address")
 	ServerRoot         = flag.String("d", "docs", "Root dir")
+	MaxDocSize         = flag.Int64("s", 10000000, "Maximum Doc size")
+	MaxDocCount        = flag.Int("x", 2000, "Maximum Doc number")
 	DefaultLifetime    = flag.Duration("t", 7*24*time.Hour, "Document lifetime")
 	DefaultNameLength  = flag.Int("n", 9, "Document name length")
 	DefaultNameCharset = flag.String("c", "abcdefghijklmnopqrstuvwxyz0123456789", "Document name charset")
+	DocCount           = 0
 )
 
 func main() {
@@ -43,6 +46,7 @@ func main() {
 	}
 	for _, doc := range docs {
 		srv.scheduleDelete(doc.Name(), *DefaultLifetime)
+		DocCount++
 	}
 
 	mux := http.NewServeMux()
@@ -56,6 +60,11 @@ func (srv *Server) docPath(name string) string {
 }
 
 func (srv *Server) postDoc(rw http.ResponseWriter, req *http.Request) {
+	// >= because DocCount can exceed maximum when loading pre-existing docs on startup
+	if DocCount >= *MaxDocCount {
+		rw.WriteHeader(http.StatusInsufficientStorage)
+		return
+	}
 	var lifetime time.Duration
 	if headerVal := req.Header.Get("Doc-Lifetime"); headerVal != "" {
 		var err error
@@ -123,14 +132,14 @@ func (srv *Server) postDoc(rw http.ResponseWriter, req *http.Request) {
 		rw.WriteHeader(http.StatusInternalServerError)
 	}
 	srv.mu.Unlock()
-	_, err = io.Copy(f, req.Body)
-	if err != nil {
+	n, err := io.CopyN(f, req.Body, *MaxDocSize)
+	if n == 0 {
 		os.Remove(srv.docPath(name))
-		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	f.Close()
 	srv.scheduleDelete(name, lifetime)
+	DocCount++
 	rw.Write([]byte(name))
 }
 
@@ -140,6 +149,7 @@ func (srv *Server) scheduleDelete(name string, d time.Duration) {
 		select {
 		case <-timer.C:
 			os.Remove(srv.docPath(name))
+			DocCount--
 		}
 	}()
 }
