@@ -56,7 +56,6 @@ func (srv *Server) docPath(name string) string {
 }
 
 func (srv *Server) postDoc(rw http.ResponseWriter, req *http.Request) {
-	log.Println("from outside")
 	var lifetime time.Duration
 	if headerVal := req.Header.Get("Doc-Lifetime"); headerVal != "" {
 		var err error
