@@ -1,9 +1,9 @@
-all: pastebin pastebind
+all: pb pbd
 
-pastebin: cmd/pastebin
+pb: cmd/pastebin
 	mkdir -p bin
 	go build -C $< -o ../../bin/$@
 
-pastebind: cmd/pastebind
+pbd: cmd/pastebind
 	mkdir -p bin
 	go build -C $< -o ../../bin/$@
